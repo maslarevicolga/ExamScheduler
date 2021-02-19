@@ -6,11 +6,12 @@ public class Main {
 
     public static void main(String[] args) throws IOException, ParseException {
 
-        String examsPath = "C:\\Users\\olgam\\Desktop\\javni_testovi\\rok2.json";
-        String roomsPath = "C:\\Users\\olgam\\Desktop\\javni_testovi\\sale2.json";
-        String solutionPath = "C:\\Users\\olgam\\Desktop\\javni_testovi\\mySolutionArc2.csv";
+        String examsPath = "C:\\Users\\olgam\\IdeaProjects\\IntelProject\\rok6.json";
+        String roomsPath = "C:\\Users\\olgam\\IdeaProjects\\IntelProject\\sale6.json";
+        String solutionPath = "C:\\Users\\olgam\\IdeaProjects\\IntelProject\\mySolutionArc6.csv";
+        String stepsPath = "C:\\Users\\olgam\\IdeaProjects\\IntelProject\\stepsArc.txt";
 
-        new App(examsPath, roomsPath, solutionPath, false, 5, false, true).solve();
+        new App(examsPath, roomsPath, solutionPath, stepsPath, true, 5, false, true).solve();
 
     }
 

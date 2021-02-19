@@ -2,6 +2,7 @@ import org.json.simple.parser.ParseException;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.List;
 
 public class App {
 
@@ -15,6 +16,7 @@ public class App {
     private final List<Exam> examsToScheduled = new LinkedList<>();
     private final Map<Exam, RoomsAndTime> examsRoomsScheduled = new LinkedHashMap<>();
 
+    private int iteration = 0;
     private final boolean oneIteration;
     private final int sec;
     private final boolean fc;
@@ -22,16 +24,17 @@ public class App {
     static final int domainLimit = 5;
 
     private static final JSONReader reader = new JSONReader();
-    private final String solutionPath;
-
+    private final String solutionPath, stepsPath;
+    private final StringBuilder sb = new StringBuilder();
     private long startTime;
 
-    public App(String examsPath, String roomsPath, String solutionPath, boolean oneIteration, int sec, boolean fc, boolean arc) throws IOException, ParseException {
+    public App(String examsPath, String roomsPath, String solutionPath, String stepsPath, boolean oneIteration, int sec, boolean fc, boolean arc) throws IOException, ParseException {
         this.solutionPath = solutionPath;
         this.oneIteration = oneIteration;
         this.sec = sec;
         this.fc = fc;
         this.arc = arc;
+        this.stepsPath = stepsPath;
 
         allExamRooms = reader.readJSONExamRooms(roomsPath);
         allExams = reader.readJSONExam(examsPath);
@@ -49,25 +52,31 @@ public class App {
         }
 
         startTime = System.currentTimeMillis();
-        System.out.println("Recursive scheduling job started at " + new Date() + "\n");
+        sb.append("Recursive scheduling job started at ").append(new Date()).append("\n");
 
-        boolean success = backtrack(assignment, 1);
+        boolean success = backtrack(assignment);
 
         long endTime = System.currentTimeMillis();
         long duration = (endTime - startTime);
-        System.out.println("Scheduling process took " + duration + " milli seconds");
+        sb.append("Scheduling process took ").append(duration).append(" milli seconds").append("\n");
 
-        if(success)
+
+        if(success || Assignment.haveSolution()) {
+            if(!oneIteration) {
+                sb.append("Best solution: \n");
+                Assignment.printSolution(sb, Assignment.getBestIndex());
+            }
             new CSVWriter().writeSolution(solutionPath, allExamRooms);
-        else
-            System.out.println("\"Unable to find the solution, terminating the program\"");
+        } else
+            sb.append("\"Unable to find the solution, terminating the program\"").append("\n");
+        CSVWriter.writeToFile(stepsPath, sb);
     }
 
-    private boolean backtrack(Assignment assignment, long iteration) {
-        if(oneIteration) assignment.printState(examsRoomsScheduled, iteration);
+    private boolean backtrack(Assignment assignment) {
+        if(oneIteration)
+            assignment.printState(examsRoomsScheduled, ++iteration, sb);
         if(examsToScheduled.isEmpty()) {
-            if(oneIteration)  System.out.println("Scheduling job completed at " + new Date());
-            Assignment.addSolution(examsRoomsScheduled);
+            Assignment.addSolution(examsRoomsScheduled, sb);
             return true;
         }
 
@@ -80,19 +89,22 @@ public class App {
             Assignment copyAssignment = new Assignment(assignment);
             copyAssignment.getExamDomain(examToAssign).clear();
             copyAssignment.getExamDomain(examToAssign).add(roomsAndTime);
-            System.out.println("Trying to assign " + roomsAndTime + " to " + examToAssign.getCode());
+            if(oneIteration)
+                sb.append("Trying to assign ").append(roomsAndTime).append(" to ").append(examToAssign.getCode()).append("\n");
 
             if(fc) {
-                if(oneIteration) System.out.println("FORWARD CHECKING");
+                if(oneIteration) sb.append("FORWARD CHECKING").append("\n");
                 if(!forwardChecking(examToAssign, roomsAndTime, copyAssignment)) {
+                    if(oneIteration) sb.append("Can't assign ").append(roomsAndTime).append(" to ").append(examToAssign.getCode()).append(" due to forward check constraint").append("\n");
                     examsToScheduled.add(examToAssign);
                     examsRoomsScheduled.remove(examToAssign);
                     continue;
                 }
             }
             else if(arc) {
-                if(oneIteration) System.out.println("ARC CHECKING");
+                if(oneIteration) sb.append("ARC CHECKING").append("\n");
                 if(!arc(examToAssign, roomsAndTime, copyAssignment)) {
+                    if(oneIteration) sb.append("Can't assign ").append(roomsAndTime).append(" to ").append(examToAssign.getCode()).append(" due to arc checking").append("\n");
                     examsToScheduled.add(examToAssign);
                     examsRoomsScheduled.remove(examToAssign);
                     continue;
@@ -100,13 +112,13 @@ public class App {
             }
             else {
                 if(!isConsistent(examToAssign, roomsAndTime)) {
-                    System.out.println("Can't assign " + roomsAndTime + " to " + examToAssign.getCode() + " due to inconsistent state");
+                    if(oneIteration) sb.append("Can't assign ").append(roomsAndTime).append(" to ").append(examToAssign.getCode()).append(" due to inconsistent state").append("\n");
                     examsToScheduled.add(examToAssign);
                     examsRoomsScheduled.remove(examToAssign);
                     continue;
                 }
             }
-            if(backtrack(copyAssignment, ++iteration)) {
+            if(backtrack(copyAssignment)) {
                 if(System.currentTimeMillis() - startTime > sec * 1000 || oneIteration) return true;
             }
             examsToScheduled.add(examToAssign);
@@ -114,6 +126,7 @@ public class App {
         }
         return false;
     }
+
     private boolean isConsistent(Exam assignedExam, RoomsAndTime assignedValue) {
         for(Exam exam : examsRoomsScheduled.keySet()) {
             if(exam == assignedExam) continue;
@@ -129,6 +142,7 @@ public class App {
         }
         return true;
     }
+
     private boolean forwardChecking(Exam assignedExam, RoomsAndTime assignedValue, Assignment copyAssignment) {
         for(Exam exam : examsToScheduled) {
             List<RoomsAndTime> myDomain = copyAssignment.getExamDomain(exam);
@@ -136,30 +150,28 @@ public class App {
             while (index < myDomain.size()) {
                 RoomsAndTime check = myDomain.get(index);
                 if(check.areSubSet(assignedValue)) {
-                    if(oneIteration) System.out.println("Remove " + check + " from " + exam.getCode() + " due to same time and rooms");
+                    if(oneIteration) sb.append("Remove ").append(check).append(" from ").append(exam.getCode()).append(" due to same time and rooms").append("\n");
                     myDomain.remove(check);
                 } else {
                     if(exam.sameYearDepartment(assignedExam)) {
                         if(check.getTime().getDay() != assignedValue.getTime().getDay()) { index++; continue; }
-                        if(oneIteration) System.out.println("Remove " + check + " from " + exam.getCode() + " due to same year and department");
+                        if(oneIteration) sb.append("Remove ").append(check).append(" from ").append(exam.getCode()).append(" due to same year and department").append("\n");
                         myDomain.remove(check);
                     } else if(exam.nextYearDepartment(assignedExam)) {
                         if(!check.getTime().same(assignedValue.getTime())) { index++; continue; }
-                        if(oneIteration) System.out.println("Remove " + check + " from " + exam.getCode() + " due to next year and same department");
+                        if(oneIteration) sb.append("Remove ").append(check).append(" from ").append(exam.getCode()).append(" due to next year and same department").append("\n");
                         myDomain.remove(check);
                     } else
                         index++;
                 }
             }
-            if(myDomain.isEmpty()) {
-                if (oneIteration)
-                    System.out.println("Can't assign " + assignedValue +
-                            " to " + assignedExam + " due to forward check constraint");
+            if(myDomain.isEmpty())
                 return false;
-            }
+
         }
         return true;
     }
+
     private Exam getExamToAssign(Assignment assignment) {
         int minDomain = Integer.MAX_VALUE;
         Exam returnExam = null;
@@ -173,59 +185,49 @@ public class App {
     }
 
     private boolean arc(Exam assignedExam, RoomsAndTime assignedValue, Assignment copyAssignment) {
-        List<Exam> arcList = new LinkedList<>(examsToScheduled);
+        List<Map.Entry<Exam, Exam>> arcMap = new LinkedList<>();
+        addToArcMap(arcMap, assignedExam);
 
-        while(!arcList.isEmpty()) {
-            Exam exam = arcList.remove(0);
-            List<RoomsAndTime> myDomain = copyAssignment.getExamDomain(exam);
-            int index = 0;
-            boolean addToArc = false;
-            while (index < myDomain.size()) {
-                RoomsAndTime check = myDomain.get(index);
-                if (check.areSubSet(assignedValue)) {
-                    if (oneIteration)
-                        System.out.println("Remove " + check + " from " + exam.getCode() + " due to same time and rooms");
-                    myDomain.remove(check);
-                    addToArc = true;
-                } else {
-                    if (exam.sameYearDepartment(assignedExam)) {
-                        if (check.getTime().getDay() != assignedValue.getTime().getDay()) {
-                            index++;
-                            continue;
-                        }
-                        if (oneIteration)
-                            System.out.println("Remove " + check + " from " + exam.getCode() + " due to same year and department");
-                        myDomain.remove(check);
-                        addToArc = true;
-                    } else if (exam.nextYearDepartment(assignedExam)) {
-                        if (!check.getTime().same(assignedValue.getTime())) {
-                            index++;
-                            continue;
-                        }
-                        if (oneIteration)
-                            System.out.println("Remove " + check + " from " + exam.getCode() + " due to next year and same department");
-                        myDomain.remove(check);
-                        addToArc = true;
-                    } else
-                        index++;
-                }
+        while (!arcMap.isEmpty()) {
+            Exam x = arcMap.get(0).getKey();
+            Exam y = arcMap.get(0).getValue();
+            arcMap.remove(0);
+
+            List<RoomsAndTime> xDomain = copyAssignment.getExamDomain(x);
+            List<RoomsAndTime> yDomain = copyAssignment.getExamDomain(y);
+            List<RoomsAndTime> xValuesToDel = new LinkedList<>();
+
+            for (RoomsAndTime rmX : xDomain) {
+                boolean yNoValue = true;
+                for (RoomsAndTime rmY : yDomain)
+                    if (!rmX.areSubSet(rmY) && (!x.sameYearDepartment(y) || rmX.getTime().getDay() != rmY.getTime().getDay()) &&
+                            (!x.nextYearDepartment(y) || !rmX.getTime().same(rmY.getTime()))) {
+                        yNoValue = false;
+                        break;
+                    }
+                if (yNoValue)
+                    xValuesToDel.add(rmX);
             }
-            if(myDomain.isEmpty()) {
-                if (oneIteration)
-                    System.out.println("Can't assign " + assignedValue +
-                            " to " + assignedExam + " due to arc check constraint");
-                return false;
+            if (!xValuesToDel.isEmpty()) {
+                xDomain.removeAll(xValuesToDel);
+                if (xDomain.isEmpty())
+                    return false;
+
+                addToArcMap(arcMap, x);
             }
-            if(addToArc)
-                addToArcList(arcList, exam);
         }
         return true;
     }
-    private void addToArcList(List<Exam> arcList, Exam cause) {
+
+    private void addToArcMap(List<Map.Entry<Exam, Exam>> arcMap, Exam cause) {
         for(Exam exam : examsToScheduled) {
-            if(arcList.contains(exam) || exam.equals(cause))
+            if(exam == cause)
                 continue;
-            arcList.add(exam);
+            boolean exist = arcMap.stream().anyMatch(entry ->
+                entry.getKey() == exam && entry.getValue() == cause
+            );
+            if(!exist)
+                arcMap.add(new AbstractMap.SimpleEntry<>(exam, cause));
         }
     }
 

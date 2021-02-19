@@ -4,6 +4,7 @@ public class Assignment {
 
     private final Map<Exam, List<RoomsAndTime>> domain;
     private static final List<LinkedHashMap<Exam, RoomsAndTime>> solutions = new LinkedList<>();
+    private static final List<Double> qualities = new LinkedList<>();
     private static int bestSolutionIndex = 0;
     private static double bestQuality = Integer.MAX_VALUE;
 
@@ -19,6 +20,11 @@ public class Assignment {
             this.domain.put(entry.getKey(), examRooms);
         }
     }
+
+    public static int getBestIndex() {
+        return bestSolutionIndex;
+    }
+
 
     private void removeRoomsPC(List<ExamRoom> copyAllRooms) {
         for(int i = 0; i < copyAllRooms.size(); )
@@ -92,7 +98,12 @@ public class Assignment {
         domain.put(exam, oneDomain);
     }
 
-    public static void addSolution(Map<Exam, RoomsAndTime> solution) {
+    public static boolean haveSolution() {
+        return !solutions.isEmpty();
+    }
+    public static void addSolution(Map<Exam, RoomsAndTime> solution, StringBuilder sb) {
+        sb.append("Solution # ").append(solutions.size());
+
         LinkedHashMap<Exam, RoomsAndTime> copySolution = new LinkedHashMap<>();
         int cnt = solutions.size();
         double quality = 0;
@@ -105,7 +116,9 @@ public class Assignment {
             bestQuality = quality;
             bestSolutionIndex = cnt;
         }
+        qualities.add(quality);
         solutions.add(copySolution);
+        if(cnt < 150000) printSolution(sb, cnt);
     }
 
     public List<RoomsAndTime> getExamDomain(Exam exam) { return domain.get(exam); }
@@ -119,18 +132,29 @@ public class Assignment {
             else sb.append(rm).append(" ");
         return sb.toString();
     }
-    public void printState(Map<Exam, RoomsAndTime> scheduled, long iteration) {
-        System.out.print("> Scheduled |         ");
-        System.out.println("exam, rooms and time");
+    public void printState(Map<Exam, RoomsAndTime> scheduled, long iteration, StringBuilder sb) {
+        sb.append("> Scheduled |         ");
+        sb.append("exam, rooms and time").append("\n");
         for(Map.Entry<Exam, RoomsAndTime> entry : scheduled.entrySet())
-            System.out.println(entry.getKey().getCode() + ", " + entry.getValue());
-        System.out.println();
-        System.out.println("> Iterations # " + iteration);
-        System.out.print(" State  |                                                ");
-        System.out.println("exam, [domain | quality | day:hour:minute]       ");
-        System.out.println("-----------------------------------------------------------");
+            sb.append(entry.getKey().getCode()).append(", ").append(entry.getValue()).append("\n");
+        sb.append("\n");
+        sb.append("> Iterations # ").append(iteration).append("\n");
+        sb.append(" State  |                                                ");
+        sb.append("exam, [domain | quality | day:hour:minute | domain size]       ").append("\n");
+        sb.append("-----------------------------------------------------------").append("\n");
         for(Map.Entry<Exam, List<RoomsAndTime>> entry : domain.entrySet()) {
-            System.out.println(entry.getKey().getCode() + printDomains(entry.getValue()));
+            sb.append(entry.getKey().getCode()).append(printDomains(entry.getValue())).append(entry.getValue().size()).append("\n");
         }
+    }
+
+
+    public static void printSolution(StringBuilder sb, int index) {
+        sb.append("> Scheduled |         ");
+        sb.append("exam, rooms and time").append("\n");
+        for(Map.Entry<Exam, RoomsAndTime> entry : solutions.get(index).entrySet())
+            sb.append(entry.getKey().getCode()).append(", ").append(entry.getValue()).append("\n");
+        sb.append("\n");
+        sb.append("Solution quality: ").append(qualities.get(index)).append("\n");
+        sb.append("\n");
     }
 }

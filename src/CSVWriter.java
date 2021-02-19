@@ -5,8 +5,16 @@ import java.util.Map;
 
 public class CSVWriter {
 
+    public static void writeToFile(String stepsPath, StringBuilder sb) throws IOException {
+        FileWriter writer = new FileWriter(stepsPath);
+        writer.write(sb.toString());
+        writer.close();
+    }
+
     public void writeSolution(String solutionPath, List<ExamRoom> allRooms) throws IOException {
-        com.opencsv.CSVWriter writer = new com.opencsv.CSVWriter(new FileWriter(solutionPath));
+        com.opencsv.CSVWriter writer = new com.opencsv.CSVWriter(
+                new FileWriter(solutionPath), ',', com.opencsv.CSVWriter.NO_QUOTE_CHARACTER,
+                com.opencsv.CSVWriter.DEFAULT_ESCAPE_CHARACTER, com.opencsv.CSVWriter.DEFAULT_LINE_END);
         int sizeAllRooms = allRooms.size();
         Map<Exam, RoomsAndTime> bestSolution = Assignment.getBestSolution();
         String[] roomsString = new String[sizeAllRooms];
@@ -19,7 +27,7 @@ public class CSVWriter {
             writer.writeNext(header);
             for (int min : App.inMinutes) {
                 String[] oneDataRow = new String[sizeAllRooms + 1];
-                oneDataRow[0]  = (min / 60) + ":" + (min % 60);
+                oneDataRow[0]  = String.format("%02d", (min / 60)) + ":" + String.format("%02d", (min % 60));
                 for(int index = 0; index < sizeAllRooms; index++) {
                     boolean found = false;
                     for(Map.Entry<Exam, RoomsAndTime> entry : bestSolution.entrySet()) {
@@ -32,11 +40,11 @@ public class CSVWriter {
                             break;
                         }
                     }
-                    if(!found) oneDataRow[index + 1] = " - ";
+                    if(!found) oneDataRow[index + 1] = "X";
                 }
                 writer.writeNext(oneDataRow);
             }
-            writer.writeNext(new String[]{"\n"});
+            if(day + 1 <= App.durationInDays) writer.writeNext(new String[]{"\n"});
         }
         writer.close();
     }
